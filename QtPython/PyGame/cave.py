@@ -4,6 +4,38 @@ from random import randint
 import pygame
 from pygame.locals import QUIT, Rect,KEYDOWN,K_SPACE
 
+class Hole:
+    def __init__(self):
+        self.holes = [] #洞窟を構成する矩形を格納する
+        self.wall = 80 #洞窟を構成する矩形の数
+        self.slope = randint(1,6) #洞窟の傾き
+        self.hole_x_width = 10
+        self.hole_y_width = 400
+        self.hole_y_position = 100
+        for xpos in range(self.wall):
+            self.holes.append(Rect(xpos * self.hole_x_width, self.hole_y_position, self.hole_x_width, self.hole_y_width))
+
+    def UpdatePositon(self, surface):
+        # 洞窟をスクロール
+        edge = self.holes[-1].copy()
+        test = edge.move(0, self.slope)
+        if test.top <= 0 or test.bottom >=  surface.get_height(): #作成した矩形が床か天井にヒット
+            self.slope = randint(1,6) * (-1 if self.slope > 0 else 1) #作成した矩形が洞窟に収まるように傾きを調整
+            edge.inflate_ip(0,-20) # Y軸方向のサイズを小さくする
+        edge.move_ip(self.hole_x_width, self.slope)
+        self.holes.append(edge)
+        if self.holes:
+            del self.holes[0]
+        self.holes = [x.move(-self.hole_x_width, 0) for x in self.holes]
+
+    def Draw(self, surface):
+        hole_color = (255,0,0)
+        for hole in self.holes:
+            pygame.draw.rect(surface, hole_color, hole)
+
+    def GetHole(self):
+        return self.holes[0];
+
 class SpaceShip:
     def __init__(self):
         self.ship_y        = 250 #自機のy座標
@@ -21,17 +53,18 @@ class SpaceShip:
             if event.key == K_SPACE:
                 self.is_space_down = True
 
-    def UpdatePositon(self):
+    def UpdatePositon(self, surface):
         self.velocity += -self.vel_y if self.is_space_down else self.vel_y
         self.ship_y += self.velocity
 
-    def DrawShip(self, surface):
+    def Draw(self, surface):
         surface.blit(self.ship_image, (0, self.ship_y))
 
     def DrawShipBang(self, surface):
         surface.blit(self.bang_image,(0, self.ship_y - 40))
 
-    def IsHitWithHole(self, hole):
+    def IsHitWith(self, target_hole):
+        hole = target_hole.GetHole()
         ship_top = self.ship_y
         ship_bottom = self.ship_y + 80
         return hole.top > ship_top or hole.bottom < ship_bottom
@@ -47,20 +80,11 @@ def main():
     surface = pygame.display.set_mode((window_width ,window_height))
     fpsclock = pygame.time.Clock()
 
-    wall = 80 #洞窟を構成する矩形の数
-    slope = randint(1,6) #洞窟の傾き
     ship = SpaceShip() # 船
-
+    hole = Hole() # 通路となる穴
     score = 0 #点数
     game_over = False # ゲームオーバーのフラグ
     sysfont = pygame.font.SysFont(None, 36)
-
-    holes = [] #洞窟を構成する矩形を格納する
-    hole_x_width = 10
-    hole_y_width = 400
-    hole_y_position = 100
-    for xpos in range(wall):
-        holes.append(Rect(xpos * hole_x_width, hole_y_position, hole_x_width, hole_y_width))
 
     #メインループ
     while True:
@@ -76,38 +100,26 @@ def main():
         # 時機移動
         if not game_over:
             score += 10
-            ship.UpdatePositon()
-
-            # 洞窟をスクロール
-            edge = holes[-1].copy()
-            test = edge.move(0, slope)
-            if test.top <= 0 or test.bottom >= window_height: #作成した矩形が床か天井にヒット
-                slope = randint(1,6) * (-1 if slope > 0 else 1) #作成した矩形が洞窟に収まるように傾きを調整
-                edge.inflate_ip(0,-20) # Y軸方向のサイズを小さくする
-            edge.move_ip(hole_x_width, slope)
-            holes.append(edge)
-            if holes:
-               del holes[0]
-            holes = [x.move(-hole_x_width, 0) for x in holes]
-
+            ship.UpdatePositon(surface)
+            hole.UpdatePositon(surface)
             # 衝突
-            game_over =  ship.IsHitWithHole(holes[0])
+            game_over =  ship.IsHitWith(hole)
 
         # 描画
         back_color = (0,255,0)
-        hole_color = (255,0,0)
         surface.fill(back_color)
-        for hole in holes:
-            pygame.draw.rect(surface, hole_color,hole)
+
+        hole.Draw(surface)
+        ship.Draw(surface)
+
         score_image = sysfont.render("score is {}".format(score),True, (0,0,255))
         score_position =(600,200)
         surface.blit(score_image, score_position )
 
-        score_image = sysfont.render("up: space key",True, (0,0,255))
-        score_position =(600,0)
-        surface.blit(score_image, score_position )
+        control_image = sysfont.render("up: space key",True, (0,0,255))
+        control_position =(600,0)
+        surface.blit(control_image, control_position )
 
-        ship.DrawShip(surface)
         if game_over:
             ship.DrawShipBang(surface)
 
