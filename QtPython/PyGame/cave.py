@@ -4,6 +4,38 @@ from random import randint
 import pygame
 from pygame.locals import QUIT, Rect,KEYDOWN,K_SPACE
 
+class SpaceShip:
+    def __init__(self):
+        self.ship_y        = 250 #自機のy座標
+        self.is_space_down = False   # 落下しているか
+        self.vel_y         = 1       # 上下速度
+        self.velocity      = 0 #自機が上下に移動する速度
+        self.ship_image    = pygame.image.load("cave\\ship.png")
+        self.bang_image    = pygame.image.load("cave\\bang.png")
+
+    def InitLoop(self):
+        self.is_space_down = False
+
+    def PygameEvent(self, event):
+        if event.type == KEYDOWN:
+            if event.key == K_SPACE:
+                self.is_space_down = True
+
+    def UpdatePositon(self):
+        self.velocity += -self.vel_y if self.is_space_down else self.vel_y
+        self.ship_y += self.velocity
+
+    def DrawShip(self, surface):
+        surface.blit(self.ship_image, (0, self.ship_y))
+
+    def DrawShipBang(self, surface):
+        surface.blit(self.bang_image,(0, self.ship_y - 40))
+
+    def IsHitWithHole(self, hole):
+        ship_top = self.ship_y
+        ship_bottom = self.ship_y + 80
+        return hole.top > ship_top or hole.bottom < ship_bottom
+
 def main():
     #初期化
     pygame.init()
@@ -17,13 +49,11 @@ def main():
 
     wall = 80 #洞窟を構成する矩形の数
     slope = randint(1,6) #洞窟の傾き
-    ship_y = 250 #自機のy座標
-    velocity = 0 #自機が上下に移動する速度
+    ship = SpaceShip() # 船
+
     score = 0 #点数
     game_over = False # ゲームオーバーのフラグ
     sysfont = pygame.font.SysFont(None, 36)
-    ship_image = pygame.image.load("cave\\ship.png")
-    bang_image = pygame.image.load("cave\\bang.png")
 
     holes = [] #洞窟を構成する矩形を格納する
     hole_x_width = 10
@@ -34,23 +64,19 @@ def main():
 
     #メインループ
     while True:
-         #ループ初期化
-        is_space_down = False
+        #ループ初期化
+        ship.InitLoop()
 
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit(0)
-            elif event.type == KEYDOWN:
-                if event.key == K_SPACE:
-                    is_space_down = True
+            ship.PygameEvent(event)
 
         # 時機移動
         if not game_over:
             score += 10
-            vel = 1
-            velocity += -vel if is_space_down else vel
-            ship_y += velocity
+            ship.UpdatePositon()
 
             # 洞窟をスクロール
             edge = holes[-1].copy()
@@ -65,10 +91,7 @@ def main():
             holes = [x.move(-hole_x_width, 0) for x in holes]
 
             # 衝突
-            ship_top = ship_y
-            ship_bottom = ship_y + 80
-            if holes[0].top > ship_top or holes[0].bottom < ship_bottom:
-                game_over = True
+            game_over =  ship.IsHitWithHole(holes[0])
 
         # 描画
         back_color = (0,255,0)
@@ -80,9 +103,13 @@ def main():
         score_position =(600,200)
         surface.blit(score_image, score_position )
 
-        surface.blit(ship_image, (0, ship_y))
+        score_image = sysfont.render("up: space key",True, (0,0,255))
+        score_position =(600,0)
+        surface.blit(score_image, score_position )
+
+        ship.DrawShip(surface)
         if game_over:
-            surface.blit(bang_image,(0, ship_y - 40))
+            ship.DrawShipBang(surface)
 
         pygame.display.update()
         fpsclock.tick(15)
