@@ -4,7 +4,73 @@ from random import randint
 import pygame
 from pygame.locals import QUIT, Rect,KEYDOWN,K_SPACE
 
+class Hole:
+    def __init__(self):
+        self.holes = [] #洞窟を構成する矩形を格納する
+        self.wall = 80 #洞窟を構成する矩形の数
+        self.slope = randint(1,6) #洞窟の傾き
+        self.hole_x_width = 10
+        self.hole_y_width = 400
+        self.hole_y_position = 100
+        for xpos in range(self.wall):
+            self.holes.append(Rect(xpos * self.hole_x_width, self.hole_y_position, self.hole_x_width, self.hole_y_width))
+
+    def UpdatePositon(self, surface):
+        # 洞窟をスクロール
+        edge = self.holes[-1].copy()
+        test = edge.move(0, self.slope)
+        if test.top <= 0 or test.bottom >=  surface.get_height(): #作成した矩形が床か天井にヒット
+            self.slope = randint(1,6) * (-1 if self.slope > 0 else 1) #作成した矩形が洞窟に収まるように傾きを調整
+            edge.inflate_ip(0,-20) # Y軸方向のサイズを小さくする
+        edge.move_ip(self.hole_x_width, self.slope)
+        self.holes.append(edge)
+        if self.holes:
+            del self.holes[0]
+        self.holes = [x.move(-self.hole_x_width, 0) for x in self.holes]
+
+    def Draw(self, surface):
+        hole_color = (255,0,0)
+        for hole in self.holes:
+            pygame.draw.rect(surface, hole_color, hole)
+
+    def GetHole(self):
+        return self.holes[0];
+
+class SpaceShip:
+    def __init__(self):
+        self.ship_y        = 250 #自機のy座標
+        self.is_space_down = False   # 落下しているか
+        self.vel_y         = 1       # 上下速度
+        self.velocity      = 0 #自機が上下に移動する速度
+        self.ship_image    = pygame.image.load("cave\\ship.png")
+        self.bang_image    = pygame.image.load("cave\\bang.png")
+
+    def InitLoop(self):
+        self.is_space_down = False
+
+    def PygameEvent(self, event):
+        if event.type == KEYDOWN:
+            if event.key == K_SPACE:
+                self.is_space_down = True
+
+    def UpdatePositon(self, surface):
+        self.velocity += -self.vel_y if self.is_space_down else self.vel_y
+        self.ship_y += self.velocity
+
+    def Draw(self, surface):
+        surface.blit(self.ship_image, (0, self.ship_y))
+
+    def DrawShipBang(self, surface):
+        surface.blit(self.bang_image,(0, self.ship_y - 40))
+
+    def IsHitWith(self, target_hole):
+        hole = target_hole.GetHole()
+        ship_top = self.ship_y
+        ship_bottom = self.ship_y + 80
+        return hole.top > ship_top or hole.bottom < ship_bottom
+
 def main():
+    #初期化
     pygame.init()
     key_repeat_delay = 5
     key_repeat_interval = 5
@@ -14,67 +80,49 @@ def main():
     surface = pygame.display.set_mode((window_width ,window_height))
     fpsclock = pygame.time.Clock()
 
-    wall = 80 #洞窟を構成する矩形の数
-    slope = randint(1,6) #洞窟の傾き
-    ship_y = 250 #自機のy座標
-    velocity = 0 #自機が上下に移動する速度
+    ship = SpaceShip() # 船
+    hole = Hole() # 通路となる穴
     score = 0 #点数
     game_over = False # ゲームオーバーのフラグ
     sysfont = pygame.font.SysFont(None, 36)
-    ship_image = pygame.image.load("ship.png")
-    bang_image = pygame.image.load("bang.png")
-
-    holes = [] #洞窟を構成する矩形を格納する
-    hole_x_width = 10
-    hole_y_width = 400
-    hole_y_position = 100
-    for xpos in range(wall):
-        holes.append(Rect(xpos * hole_x_width, hole_y_position, hole_x_width, hole_y_width))
 
     #メインループ
     while True:
-        is_space_down = False
+        #ループ初期化
+        ship.InitLoop()
+
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit(0)
-            elif event.type == KEYDOWN:
-                if event.key == K_SPACE:
-                    is_space_down = True
+            ship.PygameEvent(event)
 
         # 時機移動
         if not game_over:
             score += 10
-            vel = 1
-            velocity += -vel if is_space_down else vel
-            ship_y += velocity
-
-            # 洞窟をスクロール
-            edge = holes[-1].copy()
-            test = edge.move(0, slope)
-            if test.top <= 0 or test.bottom >= window_height: #作成した矩形が床か天井にヒット
-                slope = randint(1,6) * (-1 if slope > 0 else 1) #作成した矩形が洞窟に収まるように傾きを調整
-                edge.inflate_ip(0,-20) # Y軸方向のサイズを小さくする
-            edge.move_ip(hole_x_width, slope)
-            holes.append(edge)
-            del holes[0]
-            holes = [x.move(-hole_x_width, 0) for x in holes]
-
+            ship.UpdatePositon(surface)
+            hole.UpdatePositon(surface)
             # 衝突
-            ship_top = ship_y
-            ship_bottom = ship_y + 80
-            if holes[0].top > ship_top or holes[0].bottom < ship_bottom:
-                game_over = True
+            game_over =  ship.IsHitWith(hole)
 
         # 描画
-        surface.fill((0,255,0))
-        for hole in holes:
-            pygame.draw.rect(surface, (0,0,0),hole)
-        surface.blit(ship_image, (0, ship_y))
+        back_color = (0,255,0)
+        surface.fill(back_color)
+
+        hole.Draw(surface)
+        ship.Draw(surface)
+
         score_image = sysfont.render("score is {}".format(score),True, (0,0,255))
-        surface.blit(score_image, (600,200))
+        score_position =(600,200)
+        surface.blit(score_image, score_position )
+
+        control_image = sysfont.render("up: space key",True, (0,0,255))
+        control_position =(600,0)
+        surface.blit(control_image, control_position )
+
         if game_over:
-            surface.blit(bang_image,(0, ship_y - 40))
+            ship.DrawShipBang(surface)
+
         pygame.display.update()
         fpsclock.tick(15)
 
